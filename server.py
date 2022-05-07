@@ -1,13 +1,15 @@
-from importlib.metadata import requires
+from calendar import c
 from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_cors import CORS
+from sqlalchemy import true
+from sqlalchemy.sql.expression import asc,desc
 
 app= Flask(__name__)
 CORS(app)
 
-app.config['SQLALCHEMY_DATABASE_URI']='mysql+pymysql://root@localhost/civil'
+app.config['SQLALCHEMY_DATABASE_URI']='mysql+pymysql://root:root@localhost/civil'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS']=False
 
 db= SQLAlchemy(app)
@@ -15,7 +17,8 @@ ma= Marshmallow(app)
 
 
 class Tbl_User(db.Model):
-    cedula= db.Column(db.String(20), primary_key=True)
+    id_encuestado= db.Column(db.Integer, primary_key= True)
+    cedula= db.Column(db.String(20))
     primer_nombre= db.Column(db.String(50))
     segundo_nombre= db.Column(db.String(50))
     primer_apellido= db.Column(db.String(50))
@@ -55,7 +58,7 @@ db.create_all()
 
 class EncuestadoSchema(ma.Schema):
     class Meta:
-        fields= ('cedula', 'primer_nombre', "segundo_nombre", "primer_apellido", 
+        fields= ('id_encuestado','cedula', 'primer_nombre', "segundo_nombre", "primer_apellido", 
                  "segundo_apellido", 'email', 'direccion','unidad', 'departamento', 
                  'municipio', 'barrio', 'phone', 'escolaridad', 'latitud','longitud')
         
@@ -89,8 +92,8 @@ def create_personal_data():
     return encuestado_schema.jsonify(new_encuestado)
 
 class RespuestasExteriorVivienda(db.Model):
-    
-    cedula= db.Column(db.String(20), db.ForeignKey('tbl__user.cedula'), primary_key= True)
+    id_respuestas= db.Column(db.Integer, primary_key= True)
+    id_encuestado= db.Column(db.Integer, db.ForeignKey('tbl__user.id_encuestado'))
     anio= db.Column(db.String(20))
     constructora= db.Column(db.String(2))
     nombre_contructora= db.Column(db.String(30))
@@ -108,10 +111,10 @@ class RespuestasExteriorVivienda(db.Model):
     comparte_muro= db.Column(db.String(2))
     equipos= db.Column(db.String(25))
     
-    def __init__(self, cedula, anio, constructora, nombre_constructora, area_vivienda, imagen_vivienda, ubicacion,
+    def __init__(self, id_encuestado, anio, constructora, nombre_constructora, area_vivienda, imagen_vivienda, ubicacion,
                  elementos_cercanos, uso_actual, uso_diferente, uso_diferente_anterior, uso_primer_piso, numero_pisos, piso_vivienda,
                  sotanos, comparte_muro, equipos):
-        self.cedula= cedula
+        self.id_encuestado= id_encuestado
         self.anio= anio
         self.constructora= constructora
         self.nombre_contructora= nombre_constructora
@@ -131,7 +134,8 @@ class RespuestasExteriorVivienda(db.Model):
 
 class RespuestasInteriorVivienda(db.Model):
     
-    cedula= db.Column(db.String(20), db.ForeignKey('tbl__user.cedula'), primary_key= True)
+    id_respuestas= db.Column(db.Integer, primary_key=True)
+    id_encuestado= db.Column(db.Integer, db.ForeignKey('tbl__user.id_encuestado'))
     altura_pisos= db.Column(db.String(25))
     material_construccion= db.Column(db.String(20))
     tipo_construccion= db.Column(db.String(30))
@@ -140,15 +144,15 @@ class RespuestasInteriorVivienda(db.Model):
     hundimiento= db.Column(db.String(2))
     imagen_lejana_hundimiento= db.Column(db.Text)
     imagen_cercana_hundimiento= db.Column(db.Text)
-    grietas= db.Column(db.Text)
+    grietas= db.Column(db.String(2))
     imagen_lejana_grieta= db.Column(db.Text)
     imagen_cercana_grieta= db.Column(db.Text) 
     
-    def __init__(self, cedula, altura_pisos, material_construccion, tipo_construccion, tipo_piso, tipo_techo,
+    def __init__(self, id_encuestado, altura_pisos, material_construccion, tipo_construccion, tipo_piso, tipo_techo,
                  hundimiento, imagen_lejana_hundimiento, imagen_cercana_hundimiento, grietas, imagen_lejana_grieta, 
                  imagen_cercana_grieta ):
         
-        self.cedula= cedula
+        self.id_encuestado= id_encuestado
         self.altura_pisos= altura_pisos
         self.material_construccion= material_construccion
         self.tipo_construccion= tipo_construccion
@@ -161,12 +165,23 @@ class RespuestasInteriorVivienda(db.Model):
         self.imagen_lejana_grieta= imagen_lejana_grieta
         self.imagen_cercana_grieta= imagen_cercana_grieta
 
+class ResultadosGenerales(db.Model):
+    id_respuesta= db.Column(db.Integer, primary_key= True)
+    id_encuestado=db.Column(db.Integer, db.ForeignKey("tbl__user.id_encuestado"))
+    escala_vulnerabilidad= db.Column(db.String(30))
+    porcentaje= db.Column(db.String(5))
+    
+    def __init__(self, id_encuestado, escala_vulnerabilidad, porcentaje):
+        self.id_encuestado= id_encuestado
+        self.escala_vulnerabilidad= escala_vulnerabilidad
+        self.porcentaje= porcentaje
+        
 db.create_all()
         
 class RespuestasExteriorViviendaSchema(ma.Schema):
     
     class Meta:
-        fields=  ('cedula', 'anio', 'constructora', 'nombre_constructora', 'area_vivienda', 'imagen_vivienda',
+        fields=  ('id_encuestado', 'anio', 'constructora', 'nombre_constructora', 'area_vivienda', 'imagen_vivienda',
                  'ubicacion', 'elementos_cercanos', 'uso_actual', 'uso_diferente', 'uso_diferente_anterior',
                  'uso_primer_piso', 'numero_pisos', 'piso_vivienda', 'sotanos', 'comparte_muro', 
                  'equipos')
@@ -176,15 +191,36 @@ respuestas_exterior_vivienda_schema= RespuestasExteriorViviendaSchema()
 class RespuestasInteriorViviendaSchema(ma.Schema):
     
     class Meta:
-        fields= ("cedula", "altura_pisos", "material_construccion", "tipo_construccion", "tipo_piso", "tipo_techo",
+        fields= ("id_encuestado", "altura_pisos", "material_construccion", "tipo_construccion", "tipo_piso", "tipo_techo",
                  "hundimiento", "imagen_lejana_hundimiento", "imagen_cercana_hundimiento", "grietas", "imagen_lejana_grieta",
                  "imagen_cercana_grieta")
 
 respuestas_interior_vivienda_schema= RespuestasInteriorViviendaSchema()
 
+class ResultadosGeneralesSchema(ma.Schema):
+    
+    class Meta:
+        fields= ('id_encuestado', 'escala_vulnerabilidad', 'porcentaje')
+
+resultados_generales_schema= ResultadosGeneralesSchema()
+
+class AllResultadosSchema(ma.Schema):
+    
+    class Meta:
+        fields= ( 'id_encuestado','cedula', 'primer_nombre', "segundo_nombre", "primer_apellido", 
+                 "segundo_apellido", 'email', 'direccion','unidad', 'departamento', 'municipio', 
+                 'barrio', 'phone', 'escolaridad', 'latitud','longitud',"altura_pisos", "material_construccion",
+                 "tipo_construccion", "tipo_piso", "tipo_techo","hundimiento", "imagen_lejana_hundimiento", 
+                 "imagen_cercana_hundimiento", "grietas", "imagen_lejana_grieta","imagen_cercana_grieta",'anio', 
+                 'constructora', 'nombre_constructora', 'area_vivienda', 'imagen_vivienda','ubicacion', 'elementos_cercanos',
+                 'uso_actual', 'uso_diferente', 'uso_diferente_anterior','uso_primer_piso', 'numero_pisos', 'piso_vivienda',
+                 'sotanos', 'comparte_muro', 'equipos')
+        
+all_schema= AllResultadosSchema(many= True)
+
 @app.route("/respuestas", methods=["POST"])
 def saveAnswers():
-    cedula= request.json["cedula"]
+    id_encuestado= request.json["id_encuestado"]
     anio= request.json["anio"]
     constructora= request.json["constructora"]
     nombre_contructora= request.json["nombre_constructora"]
@@ -202,7 +238,7 @@ def saveAnswers():
     comparte_muro= request.json["comparte_muro"]
     equipos= request.json["equipos"]
     
-    exterior_vivienda= RespuestasExteriorVivienda(cedula, anio, constructora, nombre_contructora, area_vivienda, imagen_vivienda,
+    exterior_vivienda= RespuestasExteriorVivienda(id_encuestado, anio, constructora, nombre_contructora, area_vivienda, imagen_vivienda,
                                                   ubicacion, elementos_cercanos, uso_actual, uso_diferente, uso_diferente_anterior, uso_primer_piso,
                                                   numero_pisos, piso_vivienda, sotanos, comparte_muro, equipos)
     
@@ -218,45 +254,82 @@ def saveAnswers():
     imagen_lejana_grieta= request.json["imagen_lejana_grieta"]
     imagen_cercana_grieta= request.json["imagen_cercana_grieta"]
     
-    interior_vivienda= RespuestasInteriorVivienda(cedula, altura_pisos, material_construccion, tipo_construccion, tipo_piso, tipo_techo,
+    interior_vivienda= RespuestasInteriorVivienda(id_encuestado, altura_pisos, material_construccion, tipo_construccion, tipo_piso, tipo_techo,
                                                   hundimiento, imagen_lejana_hundimiento, imagen_cercana_hundimiento, grietas, imagen_lejana_grieta,
                                                   imagen_cercana_grieta)
     
+    escala_vulnerabilidad= request.json["escala_vulnerabilidad"]
+    porcentaje= request.json["porcentaje"]
+    
+    resultados_generales= ResultadosGenerales(id_encuestado, escala_vulnerabilidad, porcentaje)
+    
+    
     db.session.add(exterior_vivienda)
     db.session.add(interior_vivienda)
+    db.session.add(resultados_generales)
     db.session.commit() 
     
     return "saved"
 
+@app.route("/login")
+def login():
+    
+    if request.method == "POST":
+        username= request.json["username"]
+        password= request.json["password"]
+        
+        usernamedata= db.execute("SELECT user FROM tbl_admin WHERE username=:username",
+                             {"username":username}).fetchone() 
+        passworddata= db.execute("SELECT password FROM tbl_admin WHERE username=:username",
+                                {"username": username}).fetchone()
+        
+    if usernamedata is None:
+        return("Usuario no registrado")
+
+#Declaro schemas para traer todos los datos de cada tabla
+encuestados_schema= EncuestadoSchema(many= True)
+exterior_schema= RespuestasExteriorViviendaSchema(many= True)
+interior_schema= RespuestasInteriorViviendaSchema(many= True)
+resultados_schema= ResultadosGeneralesSchema(many= True)
+
+#Para obtener toda la información personal de los encuestados
+@app.route("/get-data-personal", methods=["GET"])
+def data_personal():
+    encuestados= db.session.query(Tbl_User).order_by(asc(Tbl_User.id_encuestado)).all()
+    ordered_encuestados= encuestados_schema.dump(encuestados)
+    
+    return encuestados_schema.jsonify(ordered_encuestados)
+
+#Para traer todas las respuestas de los encuestados en lo que corresponde al exterior
+@app.route("/get-data-exterior", methods=["GET"])
+def data_exterior():
+    exterior= db.session.query(RespuestasExteriorVivienda).order_by(asc(RespuestasExteriorVivienda.id_encuestado)).all()
+    ordered_exterior= exterior_schema.dump(exterior)
+    
+    return exterior_schema.jsonify(ordered_exterior)
+
+@app.route("/get-data-interior", methods=["GET"])
+def data_interior():
+    interior= db.session.query(RespuestasInteriorVivienda).order_by(asc(RespuestasInteriorVivienda.id_encuestado)).all()
+    ordered_interior= interior_schema.dump(interior)
+    
+    return interior_schema.jsonify(ordered_interior)
+
+@app.route("/get-data-results", methods=["GET"])
+def data_general():
+    resultados_generales= db.session.query(ResultadosGenerales).order_by(asc(ResultadosGenerales.id_encuestado)).all()
+    ordered_resultados= resultados_schema.dump(resultados_generales)
+    
+    return resultados_schema.jsonify(ordered_resultados)
+            
+@app.route("/get-fka/<cedula>", methods=["GET"])
+def get_fk(cedula):
+    d= db.session.query(Tbl_User).filter_by(cedula=cedula).all()
+    
+    return encuestado_schema.jsonify(d[-1])
 
 if(__name__ == "__main__"):
     app.run(debug=True)
-
-# @app.route("/respuestas", methods= ["POST"])
-# def upload_answers():
-#     cedula= request.json["cedula"]
-    
-class Upload(db.Model):
-    id= db.Column(db.Integer, primary_key= True)
-    file= db.Column(db.Text)
-    
-    def __init__(self,id, file):
-        self.id= id
-        self.file= file
-
-db.create_all()
-
-
-@app.route("/test", methods=["POST"])
-def uploadImg():
-    id= 17
-    file= request.json["file"]
-    
-    new_upload= Upload(id, file)
-    db.session.add(new_upload)
-    db.session.commit()
-    
-    return "uploaded"
 
 
 """
@@ -316,70 +389,3 @@ class TaskSchema(ma.Schema):
 task_schema= TaskSchema()
 tasks_schema= TaskSchema(many= True)
 """
-
-# class Respuestas(db.Model):
-    
-#     cedula= db.Column(db.String(20), db.ForeignKey('tbl__user.cedula'), primary_key= True)
-#     anio= db.Column(db.String(20))
-#     constructora= db.Column(db.String(2))
-#     nombre_contructora= db.Column(db.String(30))
-#     area_vivienda= db.Column(db.String(30))
-#     imagen_vivienda= db.Column(db.Text)
-#     ubicacion= db.Column(db.String(10))
-#     elementos_cercanos= db.Column(db.String(20))
-#     uso_actual= db.Column(db.String(30))
-#     uso_diferente= db.Column(db.String(2))
-#     uso_diferente_anterior= db.Column(db.String(30))
-#     uso_primer_piso= db.Column(db.String(30))
-#     numero_pisos= db.Column(db.String(20))
-#     piso_vivienda= db.Column(db.String(20))
-#     sotanos= db.Column(db.String(20))
-#     comparte_muro= db.Column(db.String(2))
-#     equipos= db.Column(db.String(25))
-#     altura_pisos= db.Column(db.String(25))
-#     material_construccion= db.Column(db.String(20))
-#     tipo_construccion= db.Column(db.String(30))
-#     tipo_piso= db.Column(db.String(40))
-#     tipo_techo= db.Column(db.String(40))
-#     hundimiento= db.Column(db.String(2))
-#     #faltan 2 imagenes del hundimiento
-    
-#     def __init__(self, cedula, anio, constructora, nombre_constructora, area_vivienda, ubicacion,
-#                  elementos_cercanos, uso_actual, uso_diferente, uso_diferente_anterior, uso_primer_piso, numero_pisos, piso_vivienda,
-#                  sotanos, comparte_muro, equipos, altura_pisos, material_construccion, tipo_construccion,
-#                  tipo_piso, tipo_techo, hundimiento):
-#         self.cedula= cedula
-#         self.anio= anio
-#         self.constructora= constructora
-#         self.nombre_contructora= nombre_constructora
-#         self.area_vivienda= area_vivienda
-        
-#         self.ubicacion= ubicacion
-#         self.elementos_cercanos= elementos_cercanos
-#         self.uso_actual= uso_actual
-#         self.uso_diferente= uso_diferente
-#         self.uso_diferente_anterior= uso_diferente_anterior
-#         self.uso_primer_piso= uso_primer_piso
-#         self.numero_pisos= numero_pisos
-#         self.piso_vivienda= piso_vivienda
-#         self.sotanos= sotanos
-#         self.comparte_muro= comparte_muro
-#         self.equipos= equipos
-#         self.altura_pisos= altura_pisos
-#         self.material_construccion= material_construccion
-#         self.tipo_construccion= tipo_construccion
-#         self.tipo_piso= tipo_piso
-#         self.tipo_techo= tipo_techo
-#         self.hundimiento= hundimiento
-# db.create_all()
-
-
-# class RespuestasSchema(ma.Schema):
-#     class Meta:
-#         fields= ('cedula', 'anio', 'constructora', 'nombre_constructora', 'area_vivienda',
-#                  'ubicacion', 'elementos_cercanos', 'uso_actual', 'uso_diferente', 'uso_diferente_anterior',
-#                  'uso_primer_piso', 'numero_pisos', 'piso_vivienda', 'sotanos', 'comparte_muro', 
-#                  'equipos', 'altura_pisos', 'material_construccion', 'tipo_construccion', 'tipo_piso', 'tipo_techo',
-#                  'hundimiento')
-        
-# respuestas_schema= RespuestasSchema()
