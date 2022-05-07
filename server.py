@@ -128,7 +128,7 @@ class RespuestasExteriorVivienda(db.Model):
         self.uso_primer_piso= uso_primer_piso
         self.numero_pisos= numero_pisos
         self.piso_vivienda= piso_vivienda
-        self.sotanos= sotanos
+        self.sotanos= sotanos 
         self.comparte_muro= comparte_muro
         self.equipos= equipos
 
